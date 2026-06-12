@@ -1,0 +1,353 @@
+{
+  "name": "AuraVerify  Web Enrichment",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "AuraVerify – Test the AI Scam Detector ",
+        "formDescription": "=Drop in any message you're unsure about, select where it came from, and AuraVerify will scan it for scam signals.  \n💡 Your message is only used for analysis and will never be stored.  \n",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Platform",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Email"
+                  },
+                  {
+                    "option": "LinkedIn"
+                  },
+                  {
+                    "option": "Discord"
+                  },
+                  {
+                    "option": "SMS"
+                  },
+                  {
+                    "option": "Other"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Message",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Email"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "80018e48-b427-42b1-94bd-787ffe500b59",
+      "name": "On form submission1",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        688,
+        128
+      ],
+      "webhookId": "5997fa6e-6134-4a20-992e-61f6af99ae48"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toEmail",
+              "value": "={{ ($json[\"Email\"] || $json[\"Email \"] || $json.fields?.Email || \"\").trim() || \"katiadean@gmail.com\" }}\n"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $json.Platform || $json.platform || $json.fields?.Platform || $json.fields?.platform || \"Unknown\" }}\n"
+            },
+            {
+              "name": "originalMessage",
+              "value": "={{ $json.Message || $json.message || $json.Scam || $json.fields?.Message || $json.fields?.Scam || \"\" }}\n"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0022547c-008e-4712-b419-275785a888d4",
+      "name": "Normalize Fields1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        928,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javascript",
+        "jsCode": "// Extract company name and sender domain from the message using simple heuristics\n// This runs before the Claude call to prep enrichment inputs\n\nconst msg = String($json.originalMessage || \"\");\n\n// --- Extract email domain ---\nconst emailMatch = msg.match(/[a-zA-Z0-9._%+\\-]+@([a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,})/i);\nconst senderDomain = emailMatch ? emailMatch[1].toLowerCase() : null;\n\n// --- Extract company name (look for common patterns) ---\n// Patterns: \"at Google\", \"from Microsoft\", \"I'm with Amazon\", \"on behalf of Apple\"\nconst companyPatterns = [\n  /(?:at|from|with|for|representing|on behalf of)\\s+([A-Z][a-zA-Z0-9&.,'\\- ]{1,40}?)(?:\\s*[,.]|\\s+(?:and|is|we|I|our|for|the|to|about|regarding)|$)/gm,\n  /(?:My name is [A-Z][a-z]+ [A-Z][a-z]+,?\\s+(?:and I(?:'m| am)|I'm|I am) (?:a |an )?[a-z ]+(?:at|from|with|for)\\s+)([A-Z][a-zA-Z0-9&.,'\\- ]{1,40})/m,\n  /(?:recruiter|hiring manager|talent|HR)\\s+(?:at|from|with|for)\\s+([A-Z][a-zA-Z0-9&.,'\\- ]{1,40})/im\n];\n\nlet companyName = null;\nfor (const pattern of companyPatterns) {\n  const match = pattern.exec(msg);\n  if (match && match[1]) {\n    companyName = match[1].trim().replace(/[,.]$/, \"\");\n    // Filter out false positives\n    const skipWords = ['you', 'me', 'us', 'we', 'our', 'the', 'a', 'an', 'this', 'that', 'your'];\n    if (!skipWords.includes(companyName.toLowerCase()) && companyName.length > 2) {\n      break;\n    } else {\n      companyName = null;\n    }\n  }\n}\n\n// If domain is not a free provider, use it as a company hint\nconst freeProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 'aol.com', 'protonmail.com'];\nconst domainIsCompany = senderDomain && !freeProviders.includes(senderDomain);\n\nreturn {\n  json: {\n    ...$json,\n    companyName: companyName || (domainIsCompany ? senderDomain.split('.')[0] : null),\n    senderDomain: senderDomain,\n    domainIsFreeProvider: senderDomain ? freeProviders.includes(senderDomain) : null\n  }\n};"
+      },
+      "id": "9ad3506d-cd7d-43ab-a213-a4275147261b",
+      "name": "Extract Company & Domain",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1168,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.tavily.com/search",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "api_key",
+              "value": "=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"
+            },
+            {
+              "name": "query",
+              "value": "={{ ($json.companyName || $json.senderDomain || 'unknown company') + ' employer recruiter reviews scam complaints' }}"
+            },
+            {
+              "name": "search_depth",
+              "value": "basic"
+            },
+            {
+              "name": "max_results",
+              "value": "3"
+            },
+            {
+              "name": "include_answer",
+              "value": true
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b78e6f72-db5a-4b14-ad1b-395526d78f9c",
+      "name": "Tavily Web Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1408,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javascript",
+        "jsCode": "// Merge Tavily results back with the original message data\n// and prep clean enrichment summary for Claude\n\nconst tavilyResponse = $json;\nconst prevNode = $('Extract Company & Domain').item.json;\n\n// Extract the AI answer summary from Tavily\nconst tavilyAnswer = tavilyResponse.answer || null;\n\n// Extract top result snippets as backup\nconst results = Array.isArray(tavilyResponse.results) ? tavilyResponse.results : [];\nconst snippets = results\n  .slice(0, 3)\n  .map(r => `- ${r.title || ''}: ${r.content ? r.content.substring(0, 200) : ''}`.trim())\n  .filter(Boolean)\n  .join('\\n');\n\nconst enrichmentSummary = tavilyAnswer\n  ? tavilyAnswer\n  : (snippets || 'No web enrichment data available.');\n\nreturn {\n  json: {\n    // Carry forward all original fields\n    toEmail: prevNode.toEmail,\n    platform: prevNode.platform,\n    originalMessage: prevNode.originalMessage,\n    companyName: prevNode.companyName,\n    senderDomain: prevNode.senderDomain,\n    domainIsFreeProvider: prevNode.domainIsFreeProvider,\n    // Add enrichment\n    tavilyEnrichment: enrichmentSummary,\n    tavilyQuery: ($json.query || null)\n  }\n};"
+      },
+      "id": "12442b99-24d4-4db8-a523-932403b0b75e",
+      "name": "Merge Enrichment Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1648,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this message and produce results in the JSON schema from your system instructions.\n\nPlatform (user-provided): {{$json.platform || \"Unknown\"}}\nCompany Name (extracted): {{$json.companyName || \"Not detected\"}}\nSender Domain (extracted): {{$json.senderDomain || \"Not detected\"}}\nDomain Is Free Provider (e.g. gmail, yahoo): {{$json.domainIsFreeProvider !== null ? ($json.domainIsFreeProvider ? 'YES - suspicious for a recruiter' : 'No - appears to be a company domain') : 'Unknown'}}\n\n[Web Enrichment - What we found about this company online]\n{{$json.tavilyEnrichment || \"No web data available.\"}}\n[/Web Enrichment]\n\n[Message]\n{{$json.originalMessage}}\n[/Message]\n",
+        "options": {
+          "systemMessage": "=You are AuraVerify, an AI scam detection expert with web enrichment capabilities.\n\nYou now receive additional context: the extracted company name, sender domain, whether the domain is a free provider, and a web enrichment summary from a live search about the company.\n\nUse the web enrichment data to cross-reference:\n- Does the company appear legitimate in search results?\n- Does the sender domain match the company they claim to represent?\n- Are there scam reports, complaints, or red flags in the search results?\n- Does the role described match what the company actually does?\n- Is a recruiter using a free email provider (gmail, yahoo) when claiming to be from a major company?\n\nBefore analyzing, validate the input. If the message is gibberish, random characters, too short to be a real message (under 15 words), or clearly not a recruiter/job-related communication, return ONLY this JSON:\n{\n  \"scamScore\": null,\n  \"verdict\": \"Invalid\",\n  \"reasons\": [\"Input does not appear to be a valid recruiter message or email. Please submit an actual message for analysis.\"],\n  \"platform\": \"Unknown\",\n  \"report\": \"Invalid input — please paste a real recruiter message or email to get a scam analysis.\"\n}\n\nOtherwise, return ONLY one JSON object with this exact shape:\n{\n  \"scamScore\": <integer 0-100>,\n  \"verdict\": \"Scam\" | \"Legit\",\n  \"reasons\": [\n    \"<1 full sentence with a specific indicator + a short quoted snippet from the message or web data>\",\n    \"<… 2>\",\n    \"<… 3>\",\n    \"<… 4 optional>\",\n    \"<… 5 optional>\",\n    \"<… 6 optional>\"\n  ],\n  \"platform\": \"Email\" | \"LinkedIn\" | \"WhatsApp\" | \"SMS\" | \"Unknown\",\n  \"report\": \"<<<see format below>>>\"\n}\nRules:\n- 3–6 reasons total. Be specific. Avoid vague phrases (\"generic language\", \"unclear details\").\n- Each reason should include concrete evidence in quotes (max ~12 words), e.g., \"send payment via gift card\".\n- If web enrichment reveals scam complaints or company mismatch, include that as a reason with a note like: \"Web search found scam reports associated with this company.\"\n- If domain is a free provider (gmail, yahoo) but sender claims to be from a major company, flag it explicitly.\n- If web enrichment confirms the company is legitimate and domain matches, note that as a positive signal.\n- Prefer indicators like: upfront payment, unverifiable domain, off-platform move, unrealistic offer/salary, personal data request, urgency/deadline, poor language, impersonation, mismatched contact/domain, missing verifiable details, web scam reports.\n- \"report\" MUST follow this exact layout (no extra lines before/after):\nHere's your scam detection result:\nScam Score: <scamScore>\nVerdict: <verdict>\nReason:\n- <reason 1>\n- <reason 2>\n- <reason 3>\n- <reason 4 (optional)>\n- <reason 5 (optional)>\n- <reason 6 (optional)>"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        128
+      ],
+      "id": "fb202237-eb4c-4182-aa72-e0286c43f70e",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javascript",
+        "jsCode": "// --- 1) Parse agent JSON ----------------------------------------------------\nconst aiRaw = String($json.output ?? $json.result ?? $json.text ?? $json.content ?? \"\");\nconst jsonBlock = (aiRaw.match(/\\{[\\s\\S]*\\}/) || [\"{}\"])[0];\n\nlet p = {};\ntry { p = JSON.parse(jsonBlock); } catch { p = {}; }\n\n// --- 2) Normalize fields ----------------------------------------------------\nconst clamp = (n,min,max)=>Math.max(min,Math.min(max,n));\nconst scamScore = clamp(Number(p.scamScore) || 0, 0, 100);\nconst verdict = ([\"Scam\", \"Legit\", \"Invalid\"].includes(p.verdict)) ? p.verdict : (scamScore >= 50 ? \"Scam\" : \"Legit\");\nlet reasons = Array.isArray(p.reasons) ? p.reasons.map(r => String(r).trim()).filter(Boolean) : [];\nif (!reasons.length) reasons = [\"No explicit indicators provided.\"];\nconst platform = p.platform || $json.platform || \"Unknown\";\n\n// Pull enrichment fields for email display\nconst companyName = $json.companyName || null;\nconst senderDomain = $json.senderDomain || null;\nconst tavilyEnrichment = $json.tavilyEnrichment || null;\n\n// --- 3) Styles (email-safe, inline) -----------------------------------------\nconst verdictStyles = {\n  Scam:    { bg:\"#ef4444\", text:\"#ffffff\", label:\"Scam\"    },\n  Legit:   { bg:\"#22c55e\", text:\"#ffffff\", label:\"Legit\"   },\n  Invalid: { bg:\"#f59e0b\", text:\"#ffffff\", label:\"Invalid\" }\n}[verdict] || { bg:\"#6b7280\", text:\"#ffffff\", label: verdict };\n\n// Score bar color (green→amber→red)\nlet scoreColor = \"#22c55e\";\nif (scamScore >= 70) scoreColor = \"#ef4444\";\nelse if (scamScore >= 40) scoreColor = \"#f59e0b\";\n\n// --- 4) HTML helpers --------------------------------------------------------\nconst esc = s => String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));\n\n// linkify 'domain.com' while keeping quotes\nfunction linkifyQuotedDomains(text) {\n  return text.replace(/'([a-z0-9.-]+\\.[a-z]{2,})'/gi, (m, dom) => {\n    const url = dom.startsWith('http') ? dom : `http://${dom}`;\n    return `'` + `<a href=\"${esc(url)}\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"text-decoration:none;\">${esc(dom)}</a>` + `'`;\n  });\n}\n\nconst prettyReasons = reasons.map(r => `<li style=\"margin:6px 0;\">${linkifyQuotedDomains(esc(r))}</li>`).join(\"\");\n\n// --- 5) Enrichment section (only shown if data exists) ----------------------\nconst enrichmentSection = (companyName || senderDomain) ? `\n  <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:16px 0;\">\n  <div style=\"font-weight:600; margin-bottom:6px;\">🔍 Web Enrichment</div>\n  ${companyName ? `<p style=\"margin:4px 0;\"><strong>Company detected:</strong> ${esc(companyName)}</p>` : ''}\n  ${senderDomain ? `<p style=\"margin:4px 0;\"><strong>Sender domain:</strong> ${esc(senderDomain)}</p>` : ''}\n  ${tavilyEnrichment ? `<p style=\"margin:8px 0; font-size:13px; color:#555; background:#f9fafb; padding:8px 10px; border-radius:6px; border-left:3px solid #d1d5db;\">${esc(tavilyEnrichment)}</p>` : ''}\n` : '';\n\n// --- 6) Build pretty HTML ---------------------------------------------------\nconst body = `\n  <div style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height:1.55; color:#111; max-width:640px;\">\n    <h2 style=\"margin:0 0 12px 0; font-size:20px;\">Your AuraVerify scam detection result</h2>\n\n    <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:0 0 12px 0; width:100%;\">\n      ${verdict !== \"Invalid\" ? `\n      <tr>\n        <td style=\"padding:4px 16px 4px 0; white-space:nowrap;\"><strong>Scam Score:</strong></td>\n        <td style=\"width:100%;\">\n          <div style=\"font-size:14px; margin-bottom:6px;\">${scamScore}</div>\n          <div style=\"background:#e5e7eb; border-radius:6px; height:8px; width:100%;\">\n            <div style=\"background:${scoreColor}; width:${scamScore}%; height:8px; border-radius:6px;\"></div>\n          </div>\n        </td>\n      </tr>` : ''}\n      <tr>\n        <td style=\"padding:10px 16px 0 0; white-space:nowrap;\"><strong>Verdict:</strong></td>\n        <td style=\"padding-top:8px;\">\n          <span style=\"\n            display:inline-block;\n            padding:4px 10px;\n            border-radius:999px;\n            font-weight:600;\n            font-size:12px;\n            background:${verdictStyles.bg};\n            color:${verdictStyles.text};\n            letter-spacing:0.2px;\n          \">${verdictStyles.label}</span>\n        </td>\n      </tr>\n    </table>\n\n    <div style=\"margin:16px 0 6px 0; font-weight:600;\">Reason${reasons.length>1?'s':''}:</div>\n    <ul style=\"padding-left:18px; margin:0 0 16px 0;\">\n      ${prettyReasons}\n    </ul>\n\n    ${enrichmentSection}\n\n    <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:16px 0;\">\n    <p style=\"margin:0;\"><strong>Platform:</strong> ${esc(platform)}</p>\n  </div>\n`.trim();\n\n// --- 7) Return for Gmail ----------------------------------------\nreturn {\n  json: {\n    toEmail: ($json.toEmail || \"katiadean@gmail.com\").trim(),\n    subject: \"AuraVerify: Scam Check Result\",\n    body,\n    scamScore,\n    verdict,\n    reasons,\n    platform,\n    companyName,\n    senderDomain,\n    timestamp: new Date().toISOString()\n  }\n};"
+      },
+      "id": "8091a176-0f6c-4fcb-8634-bd6efafea1fb",
+      "name": "Parse & Format1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        2128,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('On form submission1').item.json.Email }}",
+        "subject": "={{ 'AuraVerify: ' + ($json.subject || 'Scan Result') }}",
+        "message": "=\n {{ $json.body }}\n",
+        "options": {}
+      },
+      "id": "2d40e38c-a44d-41bd-a9fe-7d257461e59d",
+      "name": "Email Result1",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2368,
+        144
+      ],
+      "webhookId": "3a800755-f80d-4a37-8a3d-568208f0ae7e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ZGR61e3uJCYBsq8e",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-5-20250929",
+          "cachedResultName": "Claude Sonnet 4.5"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        1776,
+        336
+      ],
+      "id": "a5107cea-e679-4f60-81e5-200db25bb1e8",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "ITtw24KAYyEw9c5T",
+          "name": "Anthropic account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Fields1": {
+      "main": [
+        [
+          {
+            "node": "Extract Company & Domain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Company & Domain": {
+      "main": [
+        [
+          {
+            "node": "Tavily Web Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tavily Web Search": {
+      "main": [
+        [
+          {
+            "node": "Merge Enrichment Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Enrichment Data": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Parse & Format1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Format1": {
+      "main": [
+        [
+          {
+            "node": "Email Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "17c69801-bf7c-4672-bcce-b4e7d2f43a5d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "e2e22035aac6e91b75c6be223130fa61cae5d020b7910ca0ad396259f0b4466b"
+  },
+  "nodeGroups": [],
+  "id": "xNB9Dm2UW3As9aW4",
+  "tags": []
+}
