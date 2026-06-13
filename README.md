@@ -31,7 +31,7 @@ Submit a suspicious message → AuraVerify analyzes the text, looks up the compa
 [Gmail — Email Delivery]
 ```
 
-See [`/docs/architecture.png`](./docs/architecture.png) for the full visual diagram.
+See docs/auraverify_v3_architecture_diagram.png for the full visual diagram.
 
 ---
 
