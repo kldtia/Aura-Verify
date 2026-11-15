@@ -109,7 +109,7 @@ Aura-Verify/
 
 ## 👩🏾‍💻 Built By
 
-**Katia Dean** — Systems Integration Specialist & AI Builder  
+**Katia Dean** —  AI Builder  
 [LinkedIn](https://www.linkedin.com/in/katiadean/) · [Notion Project Page](https://towering-twig-329.notion.site/Aura-Verify-33be50fba7ff80ddbbd1e4184b70d764) · [GitHub](https://github.com/kldtia)
 
 *Built under Katia's Cylife AI*
