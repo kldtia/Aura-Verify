@@ -41,7 +41,7 @@ Congratulations! You have been selected for a remote position at Coinbase. Salar
 
 ## Test 3 — Borderline / Legit Recruiter (LinkedIn)
 **Platform:** LinkedIn  
-**Expected Verdict:** LOW RISK (0–30)
+**Expected Verdict:** LEGIT (0–30)
 
 ```
 Hi Katia, I'm a recruiter at Booz Allen Hamilton and I came across your profile. We have an opening for a Systems Integration PM on a cleared program in Northern Virginia. Would you be open to a 15-minute call this week to discuss? Happy to share the full JD if you're interested.
@@ -68,9 +68,24 @@ Hi! I found your resume on Indeed. I'm a career coach and I can get you 3x more 
 
 ---
 
+## Test 5 — Invalid Input (Other)
+**Platform:** Other  
+**Expected Verdict:** INVALID (no score)
+
+```
+asdf hello test 123
+```
+
+**What to check:**
+- Returns the *Invalid* verdict with a request to paste a real message
+- No score bar is shown in the result email
+
+---
+
 ## Notes for Testers
 
 - Results are delivered via email — make sure to enter a valid email in the form
-- Scam scores are 0–100; anything above 70 is flagged as likely scam
+- Verdicts: **Scam**, **Legit**, **Proceed with Caution** (legit sender but suspicious content — verify before acting), or **Invalid** (gibberish, under 15 words, or not job-related)
+- Scam scores are 0–100; the score bar turns amber at 40 and red at 70
 - The tool performs best on messages 50+ words with a company name or domain present
-- Web enrichment works best when a company name or domain is clearly stated in the message
+- Web enrichment only runs when a company name or sender domain is detected — otherwise the email notes that the web search was skipped (Tests 1 and 4 have no clear company, so expect this there)

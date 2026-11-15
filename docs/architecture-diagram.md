@@ -1,26 +1,39 @@
-# AuraVerify v3 — Architecture Diagram
+# AuraVerify v3.1 — Architecture Diagram
 
-The diagram below shows the end-to-end workflow for AuraVerify v3.
+The diagram below shows the end-to-end workflow for AuraVerify v3.1, including what each step passes to the next.
 
 ```
-[Form Submission]
-  Message + platform + email
+[On form submission]
+  Platform (Email · LinkedIn · Discord · SMS · Other) + Message + Email
         ↓
-[Extract Company + Domain]
-  Parsed from message text (n8n code node)
+[Normalize Fields]  (Set node)
+  → toEmail, platform, originalMessage
         ↓
-[Tavily Web Enrichment]  ← NEW in v3
-  Live search · scam reports · domain legitimacy check
+[Extract Company & Domain]  (Code node — regex, no AI)
+  → + companyName, senderDomain, domainIsFreeProvider
         ↓
-[Claude Sonnet 4.5 — AI Analysis]
-  Message text + web enrichment data
-  Scam signals, patterns, domain mismatches
+[Has Company or Domain?]  (IF node)
+   │ yes                                  │ no
+   ↓                                      │
+[Tavily Web Search]  (HTTP, Header Auth)  │
+  "<company> employer recruiter           │
+   reviews scam complaints" · top 3       │
+   ↓                                      │
+[Merge Enrichment Data]  (Code node) ◄────┘
+  → + tavilyEnrichment (Tavily answer, top snippets,
+      or "Web search skipped" when nothing to look up)
         ↓
-[Score + Verdict + Reasons]
-  0–100 scam score with evidence-backed explanation
+[AI Agent + Claude Sonnet 5.5]
+  Message + extracted fields + web enrichment
+  → JSON: scamScore, verdict, reasons[3–6], platform, report
         ↓
-[Gmail Delivery]
-  Results sent instantly to user's inbox
+[Parse & Format]  (Code node)
+  Parses Claude's JSON, pulls enrichment from Merge Enrichment Data
+  → HTML card: score bar, verdict badge, caution banner,
+    reasons, 🔍 Web Enrichment section
+        ↓
+[Email Result]  (Gmail)
+  Sent to toEmail · subject "AuraVerify: Scam Check Result"
 ```
 
 ## Tech Stack
@@ -29,17 +42,32 @@ The diagram below shows the end-to-end workflow for AuraVerify v3.
 |------|------|
 | Workflow automation | n8n |
 | Company + domain extraction | n8n code node |
-| Real-time web enrichment | Tavily API |
-| AI scam analysis | Claude Sonnet 4.5 (Anthropic) |
+| Real-time web enrichment | Tavily API (Header Auth credential) |
+| AI scam analysis | Claude Sonnet 5.5 (Anthropic) via n8n AI Agent |
+| Result formatting | n8n code node (email-safe inline HTML) |
 | Result delivery | Gmail |
 
-## What's New in v3
+## How Claude Decides
 
-Previous versions analyzed the message text only. v3 adds a **real-time web enrichment layer**:
+The system prompt sets a fixed reasoning order before any scoring:
 
-1. Extracts the company name and sender domain from the message
-2. Runs a live Tavily search for scam reports and legitimacy signals
-3. Passes enrichment findings to Claude alongside the original message
-4. Claude cross-references claims against real-world data before scoring
+1. Is the sender domain a verified company or known HR vendor (Checkr, ADP, Workday, Greenhouse…)? → legitimacy anchor
+2. Does the sender domain match who they claim to be?
+3. Is this post-offer onboarding (W-4, I-9, background check, payroll)? → not a red flag on its own
+4. Only then: scan language and links for scam patterns
+5. Legit domain + suspicious content → **Proceed with Caution**, not Scam
 
-This means AuraVerify no longer just reads what the sender said — it checks if it's real.
+Messages under 15 words, gibberish, or anything not job-related return **Invalid**.
+
+## What's New
+
+**v3** added a real-time web enrichment layer: the company and sender domain are pulled from the message, Tavily searches for scam reports and legitimacy signals, and Claude cross-references those findings before scoring. AuraVerify no longer just reads what the sender said — it checks if it's real.
+
+**v3.1** hardened it:
+
+- Tavily API key lives in an n8n credential, not in the workflow file
+- Tavily is skipped when no company or domain is found (no more misleading "unknown company" searches)
+- The 🔍 Web Enrichment section now actually renders in result emails
+- Single, clean email subject; one source of truth for the recipient address
+- Platform list aligned between the form and Claude (Discord, Other)
+- Successful and manual executions are not saved, so submitted messages aren't kept

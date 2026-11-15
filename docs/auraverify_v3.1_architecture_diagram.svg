@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1420" width="1000" height="1420" font-family="'Segoe UI', -apple-system, Helvetica, Arial, sans-serif">
+  <title>AuraVerify v3.1 architecture diagram</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M1 1 L10 6 L1 11" fill="none" stroke="#6f6f6a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1000" height="1420" fill="#ffffff"/>
+
+  <!-- ===== arrows (main spine) ===== -->
+  <g stroke="#6f6f6a" stroke-width="3" fill="none" marker-end="url(#arrow)">
+    <line x1="500" y1="120" x2="500" y2="166"/>
+    <line x1="500" y1="250" x2="500" y2="296"/>
+    <line x1="500" y1="380" x2="500" y2="411"/>
+    <line x1="500" y1="525" x2="500" y2="586"/>
+    <line x1="500" y1="690" x2="500" y2="756"/>
+    <line x1="500" y1="840" x2="500" y2="896"/>
+    <line x1="500" y1="1000" x2="500" y2="1066"/>
+    <line x1="500" y1="1150" x2="500" y2="1206"/>
+    <!-- skip branch -->
+    <polyline points="650,470 860,470 860,800 694,800"/>
+  </g>
+  <text x="518" y="562" font-size="18" fill="#0f6b4e" font-weight="600">yes</text>
+  <text x="872" y="600" font-size="18" fill="#6f6f6a" font-weight="600">no</text>
+  <text x="872" y="626" font-size="16" fill="#6f6f6a">skip</text>
+  <text x="872" y="648" font-size="16" fill="#6f6f6a">search</text>
+
+  <!-- ===== tool labels (left) ===== -->
+  <g font-size="22" fill="#3d3d3a" text-anchor="end">
+    <text x="215" y="218">n8n</text>
+    <text x="215" y="348">n8n</text>
+    <text x="215" y="478">n8n</text>
+    <text x="215" y="648">Tavily</text>
+    <text x="215" y="808">n8n</text>
+    <text x="215" y="940">Claude</text>
+    <text x="215" y="968">Sonnet 5.5</text>
+    <text x="215" y="1118">n8n</text>
+    <text x="215" y="1258">Gmail</text>
+  </g>
+  <g stroke="#8c8c86" stroke-width="1.5" stroke-dasharray="7 6" fill="none">
+    <line x1="232" y1="210" x2="310" y2="210"/>
+    <line x1="232" y1="340" x2="310" y2="340"/>
+    <line x1="232" y1="470" x2="350" y2="470"/>
+    <line x1="232" y1="640" x2="260" y2="640"/>
+    <line x1="232" y1="800" x2="310" y2="800"/>
+    <line x1="232" y1="950" x2="260" y2="950"/>
+    <line x1="232" y1="1110" x2="310" y2="1110"/>
+    <line x1="232" y1="1250" x2="310" y2="1250"/>
+  </g>
+
+  <!-- ===== 1. Form submission (neutral) ===== -->
+  <rect x="310" y="40" width="380" height="80" rx="14" fill="#f2efe8" stroke="#6f6f6a" stroke-width="1.5"/>
+  <text x="500" y="76" font-size="26" font-weight="600" fill="#3d3d3a" text-anchor="middle">Form submission</text>
+  <text x="500" y="104" font-size="18" fill="#6f6f6a" text-anchor="middle">Platform + message + email</text>
+
+  <!-- ===== 2. Normalize fields (purple) ===== -->
+  <rect x="310" y="170" width="380" height="80" rx="14" fill="#eeedfc" stroke="#5b4fc4" stroke-width="1.5"/>
+  <text x="500" y="206" font-size="26" font-weight="600" fill="#3b2f8f" text-anchor="middle">Normalize fields</text>
+  <text x="500" y="234" font-size="18" fill="#5b4fc4" text-anchor="middle">toEmail · platform · originalMessage</text>
+
+  <!-- ===== 3. Extract company + domain (purple) ===== -->
+  <rect x="310" y="300" width="380" height="80" rx="14" fill="#eeedfc" stroke="#5b4fc4" stroke-width="1.5"/>
+  <text x="500" y="336" font-size="26" font-weight="600" fill="#3b2f8f" text-anchor="middle">Extract company + domain</text>
+  <text x="500" y="364" font-size="18" fill="#5b4fc4" text-anchor="middle">Regex · flags free email providers</text>
+
+  <!-- ===== 4. Decision (purple diamond) ===== -->
+  <polygon points="500,415 650,470 500,525 350,470" fill="#eeedfc" stroke="#5b4fc4" stroke-width="1.5"/>
+  <text x="500" y="466" font-size="20" font-weight="600" fill="#3b2f8f" text-anchor="middle">Company or</text>
+  <text x="500" y="490" font-size="20" font-weight="600" fill="#3b2f8f" text-anchor="middle">domain found?</text>
+  <rect x="604" y="410" width="74" height="32" rx="7" fill="#1f9d6e"/>
+  <text x="641" y="432" font-size="16" font-weight="700" fill="#ffffff" text-anchor="middle">NEW</text>
+
+  <!-- ===== 5. Tavily (green) ===== -->
+  <rect x="260" y="590" width="480" height="100" rx="14" fill="#e1f3ec" stroke="#0f6b4e" stroke-width="1.5"/>
+  <text x="500" y="628" font-size="26" font-weight="600" fill="#0b4d3a" text-anchor="middle">Tavily web enrichment</text>
+  <text x="500" y="656" font-size="18" fill="#0f6b4e" text-anchor="middle">Live search · scam reports · top 3 results</text>
+  <text x="500" y="680" font-size="18" fill="#0f6b4e" text-anchor="middle">Key stored in an n8n credential</text>
+
+  <!-- ===== 6. Merge (purple) ===== -->
+  <rect x="310" y="760" width="380" height="80" rx="14" fill="#eeedfc" stroke="#5b4fc4" stroke-width="1.5"/>
+  <text x="500" y="796" font-size="26" font-weight="600" fill="#3b2f8f" text-anchor="middle">Merge enrichment data</text>
+  <text x="500" y="824" font-size="18" fill="#5b4fc4" text-anchor="middle">Web findings, or "search skipped"</text>
+
+  <!-- ===== 7. Claude (purple, wide) ===== -->
+  <rect x="260" y="900" width="480" height="100" rx="14" fill="#eeedfc" stroke="#5b4fc4" stroke-width="1.5"/>
+  <text x="500" y="938" font-size="26" font-weight="600" fill="#3b2f8f" text-anchor="middle">Claude Sonnet 5.5 analysis</text>
+  <text x="500" y="966" font-size="18" fill="#5b4fc4" text-anchor="middle">Message + extracted fields + web data</text>
+  <text x="500" y="990" font-size="18" fill="#5b4fc4" text-anchor="middle">Domain checks first, then scam patterns</text>
+
+  <!-- ===== 8. Score + verdict (amber) ===== -->
+  <rect x="310" y="1070" width="380" height="80" rx="14" fill="#fbedd9" stroke="#8a5a12" stroke-width="1.5"/>
+  <text x="500" y="1106" font-size="26" font-weight="600" fill="#5e3a05" text-anchor="middle">Score + verdict</text>
+  <text x="500" y="1134" font-size="18" fill="#8a5a12" text-anchor="middle">0–100 · Scam · Legit · Caution · Invalid</text>
+
+  <!-- ===== 9. Gmail (neutral) ===== -->
+  <rect x="310" y="1210" width="380" height="80" rx="14" fill="#f2efe8" stroke="#6f6f6a" stroke-width="1.5"/>
+  <text x="500" y="1246" font-size="26" font-weight="600" fill="#3d3d3a" text-anchor="middle">Gmail delivery</text>
+  <text x="500" y="1274" font-size="18" fill="#6f6f6a" text-anchor="middle">HTML result card to user's inbox</text>
+
+  <!-- footer -->
+  <text x="500" y="1370" font-size="20" fill="#3d3d3a" text-anchor="middle">AuraVerify v3.1 · github.com/kldtia/Aura-Verify</text>
+</svg>
