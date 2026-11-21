@@ -1,0 +1,2 @@
+# Git hooks run under bash — keep LF line endings even on Windows (core.autocrlf=true)
+.githooks/* text eol=lf

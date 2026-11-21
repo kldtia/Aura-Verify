@@ -94,6 +94,16 @@ Aura-Verify/
 
 > ⚠️ Note: Credential test may show an error in n8n 2.13.x — this is a known bug. Save and run anyway; it works.
 
+### 🔐 Contributing: enable the secret-scanning hook
+
+This repo ships a pre-commit hook that blocks commits containing API keys (Tavily, Anthropic, OpenAI, GitHub, AWS, Google, Slack, Stripe, private keys). Enable it once after cloning:
+
+```
+git config core.hooksPath .githooks
+```
+
+Never commit an n8n export with keys in it — keep them in n8n credentials.
+
 ---
 
 ## 📊 Version History

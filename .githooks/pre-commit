@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# Pre-commit secret scanner for AuraVerify.
+# Blocks commits whose *added* lines contain likely API keys or private keys.
+# Enable once per clone:   git config core.hooksPath .githooks
+# False positive? Bypass a single commit with:   git commit --no-verify
+#
+# SECRET_SCAN_BASE=<tree-ish> scans the index against that base instead of HEAD
+# (e.g. the empty tree 4b825dc642cb6eb9a060e54bf8d69288fbee4904 to scan every tracked file).
+
+set -u
+
+# "Label|flags|extended-regex"   (flags: i = case-insensitive)
+patterns=(
+  "Tavily API key||tvly-[A-Za-z0-9_-]{20,}"
+  "Anthropic API key||sk-ant-[A-Za-z0-9_-]{20,}"
+  "OpenAI API key||sk-(proj|svcacct|admin)-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}"
+  "GitHub token||gh[pousr]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}"
+  "AWS access key||(AKIA|ASIA)[0-9A-Z]{16}"
+  "Google API key||AIza[0-9A-Za-z_-]{35}"
+  "Slack token||xox[abposr]-[A-Za-z0-9-]{10,}"
+  "Stripe live key||(sk|rk)_live_[0-9A-Za-z]{24,}"
+  "Private key block||-----BEGIN ([A-Z]+ )?PRIVATE KEY-----"
+  "Hard-coded secret value|i|[\"']?(api[_-]?key|secret|token|password)[\"']?[[:space:]]*[:=][[:space:]]*[\"'][^\"'{}\$<>= ]{16,}[\"']"
+)
+
+# Emit "file:line:text" for every line added in the staged diff.
+added=$(git diff --cached ${SECRET_SCAN_BASE:-} -U0 --no-color --no-ext-diff --diff-filter=ACMR | awk '
+  /^diff --git /        { hdr = 1; next }
+  hdr && /^\+\+\+ /     { f = substr($0, 7); next }
+  /^@@/                 { hdr = 0; match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1); next }
+  !hdr && /^\+/         { print f ":" n ":" substr($0, 2); n++ }
+')
+
+[ -z "$added" ] && exit 0
+
+found=0
+for entry in "${patterns[@]}"; do
+  label=${entry%%|*}
+  rest=${entry#*|}
+  flags=${rest%%|*}
+  re=${rest#*|}
+  gflags=-E
+  [ "$flags" = "i" ] && gflags=-iE
+
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    file=${hit%%:*}
+    tmp=${hit#*:}
+    line=${tmp%%:*}
+    text=${tmp#*:}
+    match=$(printf '%s\n' "$text" | grep $gflags -o -- "$re" | head -n1)
+    preview=$(printf '%s' "$match" | cut -c1-12)
+    printf '  %s:%s  %s  (%s…)\n' "$file" "$line" "$label" "$preview" >&2
+    found=1
+  done <<< "$(printf '%s\n' "$added" | grep $gflags -- "$re")"
+done
+
+if [ "$found" -ne 0 ]; then
+  {
+    echo
+    echo "✋ Commit blocked: possible secrets in the lines above."
+    echo "   Move keys into n8n credentials / env vars, unstage them, and commit again."
+    echo "   Definitely a false positive? Re-run with: git commit --no-verify"
+  } >&2
+  exit 1
+fi
+exit 0
