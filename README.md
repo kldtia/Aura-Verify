@@ -96,13 +96,15 @@ Aura-Verify/
 
 ### 🔐 Contributing: enable the secret-scanning hook
 
-This repo ships a pre-commit hook that blocks commits containing API keys (Tavily, Anthropic, OpenAI, GitHub, AWS, Google, Slack, Stripe, private keys). Enable it once after cloning:
+This repo ships a pre-commit hook that blocks commits containing API keys (Tavily, Anthropic, OpenAI, GitHub, AWS, Google, Slack, Stripe, private keys) or **your own email address** (your `git config user.email`, e.g. left behind as the n8n fallback recipient). Enable it once after cloning:
 
 ```
 git config core.hooksPath .githooks
 ```
 
-Never commit an n8n export with keys in it — keep them in n8n credentials.
+To block additional addresses: `git config --add hooks.blockedEmail someone@example.org`
+
+Never commit an n8n export with keys or personal emails in it — keep keys in n8n credentials and use `you@example.com` as the fallback in the public copy.
 
 ---
 

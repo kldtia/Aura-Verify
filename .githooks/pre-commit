@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Pre-commit secret scanner for AuraVerify.
-# Blocks commits whose *added* lines contain likely API keys or private keys.
+# Blocks commits whose *added* lines contain likely API keys, private keys,
+# or the committer's own email address (e.g. a personal fallback recipient
+# left in an n8n export — use you@example.com in the public copy instead).
+#
 # Enable once per clone:   git config core.hooksPath .githooks
+# Block extra addresses:   git config --add hooks.blockedEmail someone@example.org
 # False positive? Bypass a single commit with:   git commit --no-verify
 #
 # SECRET_SCAN_BASE=<tree-ish> scans the index against that base instead of HEAD
@@ -34,6 +38,30 @@ added=$(git diff --cached ${SECRET_SCAN_BASE:-} -U0 --no-color --no-ext-diff --d
 [ -z "$added" ] && exit 0
 
 found=0
+
+# Fail closed: if a scan step errors (e.g. a crashing grep), block the commit.
+scan_error() {
+  printf '  Scanner error while checking: %s (exit %s)\n' "$1" "$2" >&2
+  found=1
+}
+
+# Print one finding. $1 = "file:line:matched-text", $2 = label, $3 = preview mode.
+emit() {
+  local file tmp line match preview
+  file=${1%%:*}
+  tmp=${1#*:}
+  line=${tmp%%:*}
+  match=${tmp#*:}
+  if [ "$3" = email ]; then
+    preview="$(printf '%s' "${match%%@*}" | cut -c1-3)…@${match#*@}"
+  else
+    preview="$(printf '%s' "$match" | cut -c1-12)…"
+  fi
+  printf '  %s:%s  %s  (%s)\n' "$file" "$line" "$2" "$preview" >&2
+  found=1
+}
+
+# API key patterns (grep -E / -iE; note: Git for Windows' grep -iF crashes on non-ASCII input).
 for entry in "${patterns[@]}"; do
   label=${entry%%|*}
   rest=${entry#*|}
@@ -41,25 +69,42 @@ for entry in "${patterns[@]}"; do
   re=${rest#*|}
   gflags=-E
   [ "$flags" = "i" ] && gflags=-iE
-
+  hits=$(printf '%s\n' "$added" | grep $gflags -- "$re"); st=$?
+  [ "$st" -gt 1 ] && { scan_error "$label" "$st"; continue; }
   while IFS= read -r hit; do
     [ -z "$hit" ] && continue
-    file=${hit%%:*}
     tmp=${hit#*:}
-    line=${tmp%%:*}
-    text=${tmp#*:}
-    match=$(printf '%s\n' "$text" | grep $gflags -o -- "$re" | head -n1)
-    preview=$(printf '%s' "$match" | cut -c1-12)
-    printf '  %s:%s  %s  (%s…)\n' "$file" "$line" "$label" "$preview" >&2
-    found=1
-  done <<< "$(printf '%s\n' "$added" | grep $gflags -- "$re")"
+    match=$(printf '%s\n' "${tmp#*:}" | grep $gflags -o -- "$re" | head -n1)
+    emit "${hit%%:*}:${tmp%%:*}:$match" "$label" key
+  done <<< "$hits"
 done
+
+# Personal email check: the committer's git user.email plus any hooks.blockedEmail
+# entries. Read from local git config at run time so no address is stored in this file.
+# Case-insensitive literal match done in awk (avoids the grep -iF crash).
+while IFS= read -r email; do
+  [ -z "$email" ] && continue
+  case "$email" in *noreply*|*@example.com|*@example.org) continue ;; esac
+  hits=$(printf '%s\n' "$added" | awk -v e="$email" '
+    {
+      p = index($0, ":"); rest = substr($0, p + 1); q = index(rest, ":")
+      text = substr(rest, q + 1)
+      i = index(tolower(text), tolower(e))
+      if (i) print substr($0, 1, p + q) substr(text, i, length(e))
+    }'); st=$?
+  [ "$st" -ne 0 ] && { scan_error "personal email" "$st"; continue; }
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    emit "$hit" "Personal email (use you@example.com)" email
+  done <<< "$hits"
+done <<< "$( { git config user.email; git config --get-all hooks.blockedEmail; } 2>/dev/null | sort -u )"
 
 if [ "$found" -ne 0 ]; then
   {
     echo
-    echo "✋ Commit blocked: possible secrets in the lines above."
-    echo "   Move keys into n8n credentials / env vars, unstage them, and commit again."
+    echo "✋ Commit blocked: possible secrets or personal data in the lines above."
+    echo "   Move keys into n8n credentials / env vars, swap personal emails for you@example.com,"
+    echo "   restage, and commit again."
     echo "   Definitely a false positive? Re-run with: git commit --no-verify"
   } >&2
   exit 1
